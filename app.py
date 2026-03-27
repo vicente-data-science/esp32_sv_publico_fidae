@@ -1,28 +1,41 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, Response, jsonify
 
 app = Flask(__name__)
 
-# Aquí guardaremos los datos temporalmente en la memoria del servidor
-# Para la simulación inicial de una sola unidad, una lista simple funciona perfecto.
-registro_datos = []
+# Memoria temporal RAM (Render guardará solo lo más reciente)
+ul ultimo_frame = None
+ultimas_coordenadas = {"errorX": 0, "errorY": 0, "status": "buscando"}
 
+# ---------------------------------------------------------
+# PUERTAS PARA EL ESP32-CAM (EL OJO)
+# ---------------------------------------------------------
+@app.route('/upload_frame', methods=['POST'])
+def recibir_video():
+    global ultimo_frame
+    ultimo_frame = request.data # Recibe los bytes del JPEG
+    return "Frame recibido", 200
 
-@app.route('/ingresar_datos', methods=['POST'])
-def recibir_datos():
-    # El ESP32 enviará los datos en formato JSON
-    datos_nuevos = request.json
+# ---------------------------------------------------------
+# PUERTAS PARA GOOGLE COLAB (EL CEREBRO)
+# ---------------------------------------------------------
+@app.route('/get_frame', methods=['GET'])
+def entregar_frame_a_colab():
+    if ultimo_frame:
+        return Response(ultimo_frame, mimetype='image/jpeg')
+    return "Sin video", 404
 
-    # Agregamos los datos a nuestro registro
-    registro_datos.append(datos_nuevos)
+@app.route('/update_coords', methods=['POST'])
+def recibir_calculo_de_colab():
+    global ultimas_coordenadas
+    ultimas_coordenadas = request.json # Recibe el cálculo de la IA
+    return "Coordenadas actualizadas", 200
 
-    print(f"Datos recibidos: {datos_nuevos}")
-    return jsonify({"mensaje": "Datos guardados correctamente", "status": "ok"}), 201
-
-@app.route('/obtener_datos', methods=['GET'])
-def enviar_datos():
-    # Colab usará esta ruta para descargar todo el registro
-    return jsonify(registro_datos), 200
+# ---------------------------------------------------------
+# PUERTA PARA EL ESP32 DE LOS SERVOS (EL MÚSCULO)
+# ---------------------------------------------------------
+@app.route('/get_coords', methods=['GET'])
+def entregar_coordenadas_a_motores():
+    return jsonify(ultimas_coordenadas), 200
 
 if __name__ == '__main__':
-    # El puerto 10000 es el estándar que suele usar Render
     app.run(host='0.0.0.0', port=10000)
