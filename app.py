@@ -1,4 +1,45 @@
-from flask import Flask, request, Response, jsonify
+import asyncio
+import websockets
+
+# Listas para mantener los túneles abiertos
+colab_clients = set()
+esp32_clients = set()
+
+async def handler(websocket, path):
+    # Si Colab se conecta, lo metemos a su grupo
+    if path == "/colab":
+        colab_clients.add(websocket)
+        try:
+            async for message in websocket:
+                # Si Colab envía texto (JSON de los servos), se lo reenviamos al ESP32
+                if isinstance(message, str):
+                    for esp in esp32_clients:
+                        try:
+                            await esp.send(message)
+                        except:
+                            pass
+        finally:
+            colab_clients.remove(websocket)
+
+    # Si la ESP32 se conecta, la metemos a su grupo
+    elif path == "/esp32":
+        esp32_clients.add(websocket)
+        try:
+            async for message in websocket:
+                # Si la ESP32 envía bytes (la foto), se la reenviamos a Colab
+                if isinstance(message, bytes):
+                    for colab in colab_clients:
+                        try:
+                            await colab.send(message)
+                        except:
+                            pass
+        finally:
+            esp32_clients.remove(websocket)
+
+print("Servidor WebSocket iniciado en puerto 10000...")
+start_server = websockets.serve(handler, "0.0.0.0", 10000)
+asyncio.get_event_loop().run_until_complete(start_server)
+asyncio.get_event_loop().run_forever()from flask import Flask, request, Response, jsonify
 
 app = Flask(__name__)
 
