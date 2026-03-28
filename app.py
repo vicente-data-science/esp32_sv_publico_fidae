@@ -6,13 +6,17 @@ import os
 colab_clients = set()
 esp32_clients = set()
 
-async def handler(websocket, path):
+# SINTAXIS ACTUALIZADA (Websockets >= 14.0)
+async def handler(websocket):
+    # Ahora el path se extrae de esta manera:
+    path = websocket.request.path
+
     # Si Colab se conecta
     if path == "/colab":
         colab_clients.add(websocket)
         try:
             async for message in websocket:
-                if isinstance(message, str): # JSON de servos
+                if isinstance(message, str): # Órdenes JSON para los motores
                     for esp in esp32_clients:
                         try:
                             await esp.send(message)
@@ -26,7 +30,7 @@ async def handler(websocket, path):
         esp32_clients.add(websocket)
         try:
             async for message in websocket:
-                if isinstance(message, bytes): # Foto cruda
+                if isinstance(message, bytes): # Foto en crudo
                     for colab in colab_clients:
                         try:
                             await colab.send(message)
@@ -36,12 +40,11 @@ async def handler(websocket, path):
             esp32_clients.remove(websocket)
 
 async def main():
-    # Render asigna el puerto dinámicamente, lo capturamos aquí
     port = int(os.environ.get("PORT", 10000))
     print(f"Servidor WebSocket iniciado en el puerto {port}...")
     
     async with websockets.serve(handler, "0.0.0.0", port):
-        await asyncio.Future()  # Mantiene el servidor corriendo por siempre
+        await asyncio.Future()
 
 if __name__ == "__main__":
     asyncio.run(main())
