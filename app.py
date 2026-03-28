@@ -1,28 +1,23 @@
-from flask import Flask, request, Response, jsonify
+from flask import Flask, request, Response
 
 app = Flask(__name__)
+foto_buffer = None
 
-# Memoria volátil para la imagen
-ultimo_frame = None
+# 1. El ESP32 envía a la raíz (POST /)
+@app.route('/', methods=['POST'])
+def recibir():
+    global foto_buffer
+    foto_buffer = request.data  # Aquí se guarda la imagen en RAM
+    return "OK", 200
 
-# CAMBIO CRÍTICO: Ahora aceptamos POST en la raíz '/'
-@app.route('/', methods=['GET', 'POST'])
-def handle_root():
-    global ultimo_frame
-    if request.method == 'POST':
-        # Aquí recibimos la foto del ESP32
-        ultimo_frame = request.data
-        print("¡Imagen recibida en la raíz!")
-        return "OK", 200
-    else:
-        # Si entras desde el navegador, ves esto
-        return "Servidor FIDAE: Operativo y esperando fotos.", 200
-
-@app.route('/get_frame', methods=['GET'])
-def get_frame():
-    if ultimo_frame:
-        return Response(ultimo_frame, mimetype='image/jpeg')
-    return "Aún no hay fotos", 404
+# 2. El Colab pide a la raíz (GET /)
+# CAMBIAMOS ESTO: Ahora la raíz también ENTREGA si es un GET
+@app.route('/', methods=['GET'])
+def entregar():
+    global foto_buffer
+    if foto_buffer is not None:
+        return Response(foto_buffer, mimetype='image/jpeg')
+    return "Servidor vacío. Esperando al ESP32...", 404
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
